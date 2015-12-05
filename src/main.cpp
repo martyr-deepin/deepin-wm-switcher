@@ -5,13 +5,17 @@
 
 #include <QtGui>
 #include <QX11Info>
+#include <QtDBus>
 
 #include <X11/Xlib-xcb.h>
 #include <X11/keysym.h>
 #include <xcb/xcb_keysyms.h>
 
+#include "config.h"
+
 using namespace std;
 
+#if USE_BUILTIN_KEYBINDING
 // borrowed from vlc
 static unsigned GetModifier( xcb_connection_t *p_connection, xcb_key_symbols_t *p_symbols, xcb_keysym_t sym )
 {
@@ -66,6 +70,7 @@ static unsigned GetModifier( xcb_connection_t *p_connection, xcb_key_symbols_t *
     free( p_map ); // FIXME to check
     return 0;
 }
+#endif
 
 namespace wmm {
     struct WindowManager {
@@ -91,8 +96,9 @@ namespace wmm {
 
     static WMPointer good_wm = wms.begin();
     static WMPointer bad_wm = wms.begin() + 1;
-    static SwitchingPermission  switch_permission = ALLOW_BOTH;
+    static SwitchingPermission  switch_permission = ALLOW_NONE;
 
+#if USE_BUILTIN_KEYBINDING
     class MyShortcutManager: public QObject, public QAbstractNativeEventFilter {
         Q_OBJECT
         public:
@@ -110,7 +116,7 @@ namespace wmm {
                 _keycodes = xcb_key_symbols_get_keycode(keysyms, XK_P);
 
                 if (!_keycodes || _keycodes[0] == XCB_NO_SYMBOL) {
-                    g_warning("keycode is invalid");
+                    qWarning() << ("keycode is invalid");
                 }
 
                 _mods = XCB_MOD_MASK_SHIFT | XCB_MOD_MASK_CONTROL;
@@ -142,12 +148,12 @@ namespace wmm {
                     xcb_generic_event_t* ev = static_cast<xcb_generic_event_t *>(message);
                     switch (ev->response_type & ~0x80) {
                         case XCB_KEY_PRESS: {
-                            g_debug("%s", __func__);
+                            qDebug() << __func__;
                             xcb_key_press_event_t *kev = (xcb_key_press_event_t *)ev;
                             int i = 0;
                             while (_keycodes && _keycodes[i] != XCB_NO_SYMBOL) {
                                 if (kev->detail == _keycodes[i] && (kev->state & _mods)) {
-                                    g_debug("shortcut triggered");
+                                    qInfo() << "shortcut triggered";
                                     emit toggleWM();
                                     break;
                                 }
@@ -166,7 +172,7 @@ namespace wmm {
                 return false;
             }
 
-signals:
+        signals:
             void toggleWM();
 
         private:
@@ -185,6 +191,27 @@ signals:
                 xcb_ungrab_key(QX11Info::connection(), keycode, QX11Info::appRootWindow(), mods);
             }
     };
+
+#else
+
+    class MyRemoteRequestHandler: public QDBusAbstractAdaptor {
+        Q_OBJECT
+        Q_CLASSINFO("D-Bus Interface", "com.deepin.wm_switcher")
+        public:
+            MyRemoteRequestHandler(QObject* parent): QDBusAbstractAdaptor(parent) {
+            }
+
+        public slots:
+            void requestSwitchWM() {
+                qInfo() << __func__;
+                emit toggleWM();
+            }
+
+        signals:
+            void toggleWM();
+    };
+
+#endif
 
 
     class NotifyHelper: public QObject {
@@ -227,12 +254,12 @@ signals:
                 _voted = base;
 
                 QProcess uname;
-                uname.start("uname -a");
+                uname.start("uname -m");
                 if (uname.waitForStarted()) {
                     if (uname.waitForFinished()) {
                         auto data = uname.readAllStandardOutput();
-                        string machine(data.constData());
-                        g_debug("machine: %s", machine.c_str());
+                        string machine(data.trimmed().constData());
+                        qInfo() << QString("machine: %1").arg(machine.c_str());
 
                         if (machine == "x86_64" || machine == "x86") {
                             _voted = good_wm;
@@ -287,11 +314,11 @@ signals:
         public:
             void start(const WindowManagerList::iterator& init_wm) {
                 _current = init_wm;
-                g_debug("exec wm %s", _current->genericName.c_str());
+                qInfo() << QString("exec wm %1").arg(_current->genericName.c_str());
 
                 spawn();
 
-                QTimer::singleShot(CHECK_PERIOD, this, &WindowManagerMonitor::onTimeout);
+                //QTimer::singleShot(CHECK_PERIOD, this, &WindowManagerMonitor::onTimeout);
             }
 
             virtual ~WindowManagerMonitor() {
@@ -301,6 +328,7 @@ signals:
         public slots:
             void onToggleWM() {
                 //TODO: setup rules
+                qDebug() << __func__ << "switch_permission = " << switch_permission;
                 switch (switch_permission) {
                     case ALLOW_NONE: {
                         if (_current == bad_wm) {
@@ -320,6 +348,8 @@ signals:
                 } else if (old == good_wm) {
                     _current = bad_wm;
                     _requestedNotify = &NotifyHelper::notifyStart2D;
+                } else {
+                    return;
                 }
                 spawn();
             }
@@ -341,8 +371,7 @@ signals:
                 if (_current == wms.end()) return;
 
                 if (_proc && _proc->state() == QProcess::Running) {
-                    g_warning("%s is running, force it to terminate",
-                            _proc->program().toStdString().c_str());
+                    qWarning() << QString("%1 is running, force it to terminate").arg(_proc->program());
                     _proc->disconnect();
                     _proc->kill();
                     while (!_proc->waitForFinished(KILL_TIMEOUT)) {
@@ -360,7 +389,7 @@ signals:
                 _proc->start(QString::fromUtf8(_current->execName.c_str()), QStringList() << "--replace");
 
                 if (!_proc->waitForStarted(STARTUP_DELAY)) {
-                    g_warning("%s start failed");
+                    qWarning() << QString("%1 start failed").arg(_proc->program());
                     if (switch_permission != ALLOW_BOTH && _current == good_wm) {
                         _requestedNotify = &NotifyHelper::notify3DError;
                     }
@@ -376,11 +405,10 @@ signals:
 
         private slots:
             void onWMProcFinished(int exitCode, QProcess::ExitStatus status) {
-                g_debug("%s: exitCode = %d", __func__, exitCode);
+                qInfo() << __func__ << ": exitCode = " << exitCode;
 
                 if (status == QProcess::CrashExit || exitCode != 0) {
-                    g_warning("%s crashed or failure, switch wm",
-                            _proc->program().toStdString().c_str());
+                    qWarning() << QString("%1 crashed or failure, switch wm").arg(_proc->program());
                     _current = _current == good_wm ? bad_wm: good_wm;
                 }
 
@@ -388,7 +416,7 @@ signals:
             }
 
             void onTimeout() {
-                //g_debug("do periodic healthy check");
+                qDebug() << "do periodic healthy check";
                 QTimer::singleShot(CHECK_PERIOD, this, &WindowManagerMonitor::onTimeout);
             }
 
@@ -401,10 +429,20 @@ int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
 
-    g_debug("%s: display %p, xcb %p", __func__, QX11Info::display(), QX11Info::connection());
-
+#if USE_BUILTIN_KEYBINDING
     wmm::MyShortcutManager xcbFilter;
     app.installNativeEventFilter(&xcbFilter);
+#else
+    wmm::MyRemoteRequestHandler dobj(&app);
+
+    auto conn = QDBusConnection::sessionBus();
+    if (!conn.registerService("com.deepin.wm_switcher")) {
+        qWarning("register service failed");
+    }
+
+    // connect to D-Bus and register as an object:
+    conn.registerObject("/com/deepin/wm_switcher", &app);
+#endif
 
 
     wmm::WindowManagerMonitor wmMonitor;
@@ -424,11 +462,16 @@ int main(int argc, char *argv[])
 
     if (p == wmm::wms.end()) {
         p = wmm::good_wm;
-        g_debug("use fallback %s", p->genericName.c_str());
+        qDebug() << QString("use fallback %1").arg(p->genericName.c_str());
     }
 
     wmMonitor.start(p);
+
+#if USE_BUILTIN_KEYBINDING
     QObject::connect(&xcbFilter, &MyShortcutManager::toggleWM, &wmMonitor, &WindowManagerMonitor::onToggleWM);
+#else
+    QObject::connect(&dobj, &MyRemoteRequestHandler::toggleWM, &wmMonitor, &WindowManagerMonitor::onToggleWM);
+#endif
 
     app.exec();
 
