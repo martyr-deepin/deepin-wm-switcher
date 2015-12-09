@@ -412,12 +412,12 @@ namespace wmm {
                     _current = _current == good_wm ? bad_wm: good_wm;
                 }
 
-                QTimer::singleShot(STARTUP_DELAY, this, &WindowManagerMonitor::spawn);
+                QTimer::singleShot(STARTUP_DELAY, this, SLOT(spawn()));
             }
 
             void onTimeout() {
                 qDebug() << "do periodic healthy check";
-                QTimer::singleShot(CHECK_PERIOD, this, &WindowManagerMonitor::onTimeout);
+                QTimer::singleShot(CHECK_PERIOD, this, SLOT(onTimeout()));
             }
 
     };
@@ -468,9 +468,9 @@ int main(int argc, char *argv[])
     wmMonitor.start(p);
 
 #if USE_BUILTIN_KEYBINDING
-    QObject::connect(&xcbFilter, &MyShortcutManager::toggleWM, &wmMonitor, &WindowManagerMonitor::onToggleWM);
+    QObject::connect(&xcbFilter, SIGNAL(toggleWM()), &wmMonitor, SLOT(onToggleWM()));
 #else
-    QObject::connect(&dobj, &MyRemoteRequestHandler::toggleWM, &wmMonitor, &WindowManagerMonitor::onToggleWM);
+    QObject::connect(&dobj, SIGNAL(toggleWM()), &wmMonitor, SLOT(onToggleWM()));
 #endif
 
     app.exec();
