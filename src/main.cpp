@@ -116,7 +116,9 @@ namespace wmm {
                 _keycodes = xcb_key_symbols_get_keycode(keysyms, XK_P);
 
                 if (!_keycodes || _keycodes[0] == XCB_NO_SYMBOL) {
+#ifndef __alpha__
                     qWarning() << ("keycode is invalid");
+#endif
                 }
 
                 _mods = XCB_MOD_MASK_SHIFT | XCB_MOD_MASK_CONTROL;
@@ -148,12 +150,13 @@ namespace wmm {
                     xcb_generic_event_t* ev = static_cast<xcb_generic_event_t *>(message);
                     switch (ev->response_type & ~0x80) {
                         case XCB_KEY_PRESS: {
-                            qDebug() << __func__;
                             xcb_key_press_event_t *kev = (xcb_key_press_event_t *)ev;
                             int i = 0;
                             while (_keycodes && _keycodes[i] != XCB_NO_SYMBOL) {
                                 if (kev->detail == _keycodes[i] && (kev->state & _mods)) {
+#ifndef __alpha__
                                     qInfo() << "shortcut triggered";
+#endif
                                     emit toggleWM();
                                     break;
                                 }
@@ -203,7 +206,6 @@ namespace wmm {
 
         public slots:
             void requestSwitchWM() {
-                qInfo() << __func__;
                 emit toggleWM();
             }
 
@@ -259,7 +261,9 @@ namespace wmm {
                     if (uname.waitForFinished()) {
                         auto data = uname.readAllStandardOutput();
                         string machine(data.trimmed().constData());
+#ifndef __alpha__
                         qInfo() << QString("machine: %1").arg(machine.c_str());
+#endif
 
                         if (machine == "x86_64" || machine == "x86") {
                             _voted = good_wm;
@@ -314,7 +318,9 @@ namespace wmm {
         public:
             void start(const WindowManagerList::iterator& init_wm) {
                 _current = init_wm;
+#ifndef __alpha__
                 qInfo() << QString("exec wm %1").arg(_current->genericName.c_str());
+#endif
 
                 spawn();
 
@@ -328,7 +334,9 @@ namespace wmm {
         public slots:
             void onToggleWM() {
                 //TODO: setup rules
+#ifndef __alpha__
                 qDebug() << __func__ << "switch_permission = " << switch_permission;
+#endif
                 switch (switch_permission) {
                     case ALLOW_NONE: {
                         if (_current == bad_wm) {
@@ -371,7 +379,9 @@ namespace wmm {
                 if (_current == wms.end()) return;
 
                 if (_proc && _proc->state() == QProcess::Running) {
+#ifndef __alpha__
                     qWarning() << QString("%1 is running, force it to terminate").arg(_proc->program());
+#endif
                     _proc->disconnect();
                     _proc->kill();
                     while (!_proc->waitForFinished(KILL_TIMEOUT)) {
@@ -389,7 +399,9 @@ namespace wmm {
                 _proc->start(QString::fromUtf8(_current->execName.c_str()), QStringList() << "--replace");
 
                 if (!_proc->waitForStarted(STARTUP_DELAY)) {
+#ifndef __alpha__
                     qWarning() << QString("%1 start failed").arg(_proc->program());
+#endif
                     if (switch_permission != ALLOW_BOTH && _current == good_wm) {
                         _requestedNotify = &NotifyHelper::notify3DError;
                     }
@@ -405,10 +417,14 @@ namespace wmm {
 
         private slots:
             void onWMProcFinished(int exitCode, QProcess::ExitStatus status) {
+#ifndef __alpha__
                 qInfo() << __func__ << ": exitCode = " << exitCode;
+#endif
 
                 if (status == QProcess::CrashExit || exitCode != 0) {
+#ifndef __alpha__
                     qWarning() << QString("%1 crashed or failure, switch wm").arg(_proc->program());
+#endif
                     _current = _current == good_wm ? bad_wm: good_wm;
                 }
 
@@ -416,7 +432,6 @@ namespace wmm {
             }
 
             void onTimeout() {
-                qDebug() << "do periodic healthy check";
                 QTimer::singleShot(CHECK_PERIOD, this, SLOT(onTimeout()));
             }
 
@@ -437,7 +452,9 @@ int main(int argc, char *argv[])
 
     auto conn = QDBusConnection::sessionBus();
     if (!conn.registerService("com.deepin.wm_switcher")) {
+#ifndef __alpha__
         qWarning("register service failed");
+#endif
     }
 
     // connect to D-Bus and register as an object:
@@ -462,7 +479,6 @@ int main(int argc, char *argv[])
 
     if (p == wmm::wms.end()) {
         p = wmm::good_wm;
-        qDebug() << QString("use fallback %1").arg(p->genericName.c_str());
     }
 
     wmMonitor.start(p);
