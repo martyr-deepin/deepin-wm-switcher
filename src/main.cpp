@@ -373,6 +373,7 @@ namespace wmm {
 
             const int CHECK_PERIOD = 1000;
             const int STARTUP_DELAY = 500;
+            const int NOTIFY_DELAY = 600;
             const int KILL_TIMEOUT = 3000;
 
             void spawn() {
@@ -393,7 +394,6 @@ namespace wmm {
                     _proc = new QProcess;
                 }
 
-                //connect(_proc, &QProcess::finished, this, &WindowManagerMonitor::onWMProcFinished);
                 connect(_proc, SIGNAL(finished(int, QProcess::ExitStatus)), 
                             this, SLOT(onWMProcFinished(int, QProcess::ExitStatus)));
                 _proc->start(QString::fromUtf8(_current->execName.c_str()), QStringList() << "--replace");
@@ -407,15 +407,18 @@ namespace wmm {
                     }
                 } 
 
-                if (_requestedNotify != nullptr) {
-                    (_notify.*_requestedNotify)();
-                    _requestedNotify = nullptr;
-                }
-
+                QTimer::singleShot(NOTIFY_DELAY, this, SLOT(onDelayedNotify()));
                 _spawnCount++;
             }
 
         private slots:
+            void onDelayedNotify() {
+                if (_requestedNotify != nullptr) {
+                    (_notify.*_requestedNotify)();
+                    _requestedNotify = nullptr;
+                }
+            }
+
             void onWMProcFinished(int exitCode, QProcess::ExitStatus status) {
 #ifndef __alpha__
                 qInfo() << __func__ << ": exitCode = " << exitCode;
