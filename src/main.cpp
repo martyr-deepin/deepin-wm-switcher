@@ -376,6 +376,7 @@ namespace wmm {
             const int NOTIFY_DELAY = 600;
             const int KILL_TIMEOUT = 3000;
 
+        private slots:
             void spawn() {
                 if (_current == wms.end()) return;
 
@@ -411,7 +412,6 @@ namespace wmm {
                 _spawnCount++;
             }
 
-        private slots:
             void onDelayedNotify() {
                 if (_requestedNotify != nullptr) {
                     (_notify.*_requestedNotify)();
