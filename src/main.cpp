@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include <QtGlobal>
 #include <QtGui>
 #include <QX11Info>
 #include <QtDBus>
@@ -12,6 +13,8 @@
 #include <xcb/xcb_keysyms.h>
 
 #include "config.h"
+
+#define C2Q(cs) (QString::fromUtf8((cs).c_str()))
 
 using namespace std;
 
@@ -72,6 +75,16 @@ static unsigned GetModifier( xcb_connection_t *p_connection, xcb_key_symbols_t *
 }
 #endif
 
+#ifndef __alpha__
+#define wmm_debug() qDebug()
+#define wmm_warning() qWarning()
+#define wmm_info() qInfo()
+#else
+#define wmm_debug() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug() 
+#define wmm_warning() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).warning() 
+#define wmm_info() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).info() 
+#endif
+
 namespace wmm {
     struct WindowManager {
         string genericName;
@@ -98,6 +111,8 @@ namespace wmm {
     static WMPointer bad_wm = wms.begin() + 1;
     static SwitchingPermission  switch_permission = ALLOW_NONE;
 
+    static WindowManagerList::iterator apply_rules();
+
 #if USE_BUILTIN_KEYBINDING
     class MyShortcutManager: public QObject, public QAbstractNativeEventFilter {
         Q_OBJECT
@@ -116,9 +131,7 @@ namespace wmm {
                 _keycodes = xcb_key_symbols_get_keycode(keysyms, XK_P);
 
                 if (!_keycodes || _keycodes[0] == XCB_NO_SYMBOL) {
-#ifndef __alpha__
-                    qWarning() << ("keycode is invalid");
-#endif
+                    wmm_warning() << ("keycode is invalid");
                 }
 
                 _mods = XCB_MOD_MASK_SHIFT | XCB_MOD_MASK_CONTROL;
@@ -154,9 +167,7 @@ namespace wmm {
                             int i = 0;
                             while (_keycodes && _keycodes[i] != XCB_NO_SYMBOL) {
                                 if (kev->detail == _keycodes[i] && (kev->state & _mods)) {
-#ifndef __alpha__
-                                    qInfo() << "shortcut triggered";
-#endif
+                                    wmm_info() << "shortcut triggered";
                                     emit toggleWM();
                                     break;
                                 }
@@ -261,9 +272,7 @@ namespace wmm {
                     if (uname.waitForFinished()) {
                         auto data = uname.readAllStandardOutput();
                         string machine(data.trimmed().constData());
-#ifndef __alpha__
-                        qInfo() << QString("machine: %1").arg(machine.c_str());
-#endif
+                        wmm_info() << QString("machine: %1").arg(machine.c_str());
 
                         if (machine == "x86_64" || machine == "x86") {
                             _voted = good_wm;
@@ -318,9 +327,7 @@ namespace wmm {
         public:
             void start(const WindowManagerList::iterator& init_wm) {
                 _current = init_wm;
-#ifndef __alpha__
-                qInfo() << QString("exec wm %1").arg(_current->genericName.c_str());
-#endif
+                wmm_info() << QString("exec wm %1").arg(C2Q(_current->genericName));
 
                 spawn();
 
@@ -334,9 +341,7 @@ namespace wmm {
         public slots:
             void onToggleWM() {
                 //TODO: setup rules
-#ifndef __alpha__
-                qDebug() << __func__ << "switch_permission = " << switch_permission;
-#endif
+                wmm_debug() << __func__ << "switch_permission = " << switch_permission;
                 switch (switch_permission) {
                     case ALLOW_NONE: {
                         if (_current == bad_wm) {
@@ -376,14 +381,43 @@ namespace wmm {
             const int NOTIFY_DELAY = 600;
             const int KILL_TIMEOUT = 3000;
 
+            void doSanityCheck() {
+                auto old = _current;
+
+                QString s = QString::fromUtf8(qgetenv("PATH"));
+                QString cmd = QStandardPaths::findExecutable(C2Q(good_wm->execName));
+                QFileInfo fi_good(cmd);
+
+                cmd = QStandardPaths::findExecutable(C2Q(bad_wm->execName));
+                QFileInfo fi_bad(cmd);
+
+                if (_current == good_wm) {
+                    if (!fi_good.exists() || !fi_good.isExecutable()) {
+                        _current = bad_wm;
+                        if (!fi_bad.exists() || !fi_bad.isExecutable()) {
+                            _current = wms.end();
+                        }
+                    }
+
+                } else if (_current == bad_wm) {
+                    if (!fi_bad.exists() || !fi_bad.isExecutable()) {
+                        _current = good_wm;
+                        if (!fi_good.exists() || !fi_good.isExecutable()) {
+                            _current = wms.end();
+                        }
+                    }
+
+                } else _current = wms.end();
+
+                wmm_warning() << QString("%1: %2 -> %3").arg(__func__)
+                    .arg(old != wms.end() ? old->genericName.c_str() : "")
+                    .arg(_current != wms.end() ? _current->genericName.c_str() : "");
+            }
+
         private slots:
             void spawn() {
-                if (_current == wms.end()) return;
-
                 if (_proc && _proc->state() == QProcess::Running) {
-#ifndef __alpha__
-                    qWarning() << QString("%1 is running, force it to terminate").arg(_proc->program());
-#endif
+                    wmm_warning() << QString("%1 is running, force it to terminate").arg(_proc->program());
                     _proc->disconnect();
                     _proc->kill();
                     while (!_proc->waitForFinished(KILL_TIMEOUT)) {
@@ -395,14 +429,15 @@ namespace wmm {
                     _proc = new QProcess;
                 }
 
+                doSanityCheck();
+                if (_current == wms.end()) return;
+
                 connect(_proc, SIGNAL(finished(int, QProcess::ExitStatus)), 
                             this, SLOT(onWMProcFinished(int, QProcess::ExitStatus)));
-                _proc->start(QString::fromUtf8(_current->execName.c_str()), QStringList() << "--replace");
+                _proc->start(C2Q(_current->execName), QStringList() << "--replace");
 
                 if (!_proc->waitForStarted(STARTUP_DELAY)) {
-#ifndef __alpha__
-                    qWarning() << QString("%1 start failed").arg(_proc->program());
-#endif
+                    wmm_warning() << QString("%1 start failed").arg(_proc->program());
                     if (switch_permission != ALLOW_BOTH && _current == good_wm) {
                         _requestedNotify = &NotifyHelper::notify3DError;
                     }
@@ -420,14 +455,10 @@ namespace wmm {
             }
 
             void onWMProcFinished(int exitCode, QProcess::ExitStatus status) {
-#ifndef __alpha__
-                qInfo() << __func__ << ": exitCode = " << exitCode;
-#endif
+                wmm_info() << __func__ << ": exitCode = " << exitCode;
 
                 if (status == QProcess::CrashExit || exitCode != 0) {
-#ifndef __alpha__
-                    qWarning() << QString("%1 crashed or failure, switch wm").arg(_proc->program());
-#endif
+                    wmm_warning() << QString("%1 crashed or failure, switch wm").arg(_proc->program());
                     _current = _current == good_wm ? bad_wm: good_wm;
                 }
 
@@ -435,11 +466,40 @@ namespace wmm {
             }
 
             void onTimeout() {
+                if (_current == wms.end()) {
+                    wmm_warning() << "there is no wm running currently, try launch one";
+                    _current = apply_rules();
+                    spawn();
+                }
+
                 QTimer::singleShot(CHECK_PERIOD, this, SLOT(onTimeout()));
             }
 
     };
+
+
+    static WindowManagerList::iterator apply_rules() {
+        vector<Rule*> rules = {
+            new PlatformChecker(),
+            new EnvironmentChecker(),
+        };
+
+        WindowManagerList::iterator p = good_wm;
+        for (auto& rule: rules) {
+            if (rule->doTest(p)) {
+                p = rule->getSupport();
+                break;
+            }
+        }
+
+        if (p == wms.end()) {
+            p = good_wm;
+        }
+
+        return p;
+    }
 };
+
 
 using namespace wmm;
 
@@ -455,9 +515,8 @@ int main(int argc, char *argv[])
 
     auto conn = QDBusConnection::sessionBus();
     if (!conn.registerService("com.deepin.wm_switcher")) {
-#ifndef __alpha__
-        qWarning("register service failed");
-#endif
+        wmm_warning() << "register service failed";
+        return -1;
     }
 
     // connect to D-Bus and register as an object:
@@ -467,23 +526,7 @@ int main(int argc, char *argv[])
 
     wmm::WindowManagerMonitor wmMonitor;
 
-    vector<wmm::Rule*> rules = {
-        new wmm::PlatformChecker(),
-        new wmm::EnvironmentChecker(),
-    };
-
-    wmm::WindowManagerList::iterator p = wmm::good_wm;
-    for (auto& rule: rules) {
-        if (rule->doTest(p)) {
-            p = rule->getSupport();
-            break;
-        }
-    }
-
-    if (p == wmm::wms.end()) {
-        p = wmm::good_wm;
-    }
-
+    auto p = wmm::apply_rules();
     wmMonitor.start(p);
 
 #if USE_BUILTIN_KEYBINDING
