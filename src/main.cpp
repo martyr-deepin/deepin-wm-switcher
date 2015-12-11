@@ -274,7 +274,8 @@ namespace wmm {
                         string machine(data.trimmed().constData());
                         wmm_info() << QString("machine: %1").arg(machine.c_str());
 
-                        if (machine == "x86_64" || machine == "x86") {
+                        QRegExp re("x86.*|i?86|ia64", Qt::CaseInsensitive);
+                        if (re.exactMatch(C2Q(machine))) {
                             _voted = good_wm;
                             switch_permission = ALLOW_BOTH;
 
@@ -282,7 +283,7 @@ namespace wmm {
                             _voted = bad_wm;
                             switch_permission = ALLOW_NONE;
 
-                        } else if (machine == "mips64") { // loongson
+                        } else if (machine.find("mips") != string::npos) { // loongson
                             //TODO: may need to check graphics card
                             _voted = good_wm;
                             switch_permission = ALLOW_BOTH;
