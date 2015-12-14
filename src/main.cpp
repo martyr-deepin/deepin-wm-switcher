@@ -541,8 +541,12 @@ namespace wmm {
                 doSanityCheck();
                 if (_current == wms.end()) return;
 
+                auto sys_env = QProcessEnvironment::systemEnvironment();
+                sys_env.insert(_current->env);
+
                 connect(_proc, SIGNAL(finished(int, QProcess::ExitStatus)), 
                             this, SLOT(onWMProcFinished(int, QProcess::ExitStatus)));
+                _proc->setProcessEnvironment(sys_env);
                 _proc->start(C2Q(_current->execName), QStringList() << "--replace");
 
                 if (!_proc->waitForStarted(STARTUP_DELAY)) {
