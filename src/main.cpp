@@ -89,13 +89,14 @@ namespace wmm {
     struct WindowManager {
         string genericName;
         string execName;
+        QProcessEnvironment env;
     };
 
     using WindowManagerList = vector<WindowManager>;
 
     WindowManagerList wms = {
-        {"deepin wm", "deepin-wm"},
-        {"deepin metacity", "deepin-metacity"},
+        {"deepin wm", "deepin-wm", {}},
+        {"deepin metacity", "deepin-metacity", {}},
     };
 
     enum SwitchingPermission {
@@ -254,16 +255,24 @@ namespace wmm {
     class Rule {
         public:
             /**
-             * return true if checker can confirm the use of specific  wm. 
-             * else false to do next check.
+             * do some test and may change supported wm
              */
-            virtual bool doTest(WMPointer base) = 0;
+            virtual void doTest(WMPointer base) = 0;
+            /**
+             * wm that this Rule recommends most
+             */
             virtual WMPointer getSupport() = 0;
+            /** 
+             * some changes needed in the environment
+             */
+            virtual QProcessEnvironment additionalEnv() {
+                return QProcessEnvironment();
+            }
     };
 
     class PlatformChecker: public Rule {
         public:
-            bool doTest(WMPointer base) override {
+            void doTest(WMPointer base) override {
                 _voted = base;
 
                 QProcess uname;
@@ -287,17 +296,9 @@ namespace wmm {
                             //TODO: may need to check graphics card
                             _voted = good_wm;
                             switch_permission = ALLOW_BOTH;
-
-                        } else {
-                            // unknown machine
-                            return false;
                         }
-
-                        return true;
                     }
                 }
-
-                return false;
             }
 
             WMPointer getSupport() override {
@@ -310,17 +311,115 @@ namespace wmm {
 
     class EnvironmentChecker: public Rule {
         public:
-            bool doTest(WMPointer base) override {
+            enum VideoEnv {
+                Unknown,
+                Intel,
+                AMD,
+                Nvidia,
+                VirtualBox,
+                VMWare
+            };
+
+            void doTest(WMPointer base) override {
                 _voted = base;
-                return false;
+
+                if (!isDriverLoadedCorrectly()) {
+                    _voted = bad_wm;
+                    return;
+                }
+
+                QString data;
+                QProcess lspci;
+                lspci.start("lspci");
+                if (lspci.waitForStarted() && lspci.waitForFinished()) {
+                    data = QString::fromUtf8(lspci.readAllStandardOutput());
+                }
+
+                static QRegExp vbox("vga.*virtualbox", Qt::CaseInsensitive);
+                static QRegExp vmware("vga.*vmware", Qt::CaseInsensitive);
+                static QRegExp intel("vga.*intel", Qt::CaseInsensitive);
+                static QRegExp amd("vga.*ati", Qt::CaseInsensitive);
+                static QRegExp nvidia("vga.*nvidia", Qt::CaseInsensitive);
+
+                if (vbox.indexIn(data) != -1) {
+                    wmm_info() << "video env: VirtualBox";
+                    _video = VideoEnv::VirtualBox;
+                } else if (vmware.indexIn(data) != -1) {
+                    wmm_info() << "video env: VMWare";
+                    _video = VideoEnv::VMWare;
+                } else if (intel.indexIn(data) != -1) {
+                    wmm_info() << "video env: Intel";
+                    _video = VideoEnv::Intel;
+                } else if (amd.indexIn(data) != -1) {
+                    wmm_info() << "video env: AMD/ATI";
+                    _video = VideoEnv::AMD;
+                } else if (nvidia.indexIn(data) != -1) {
+                    wmm_info() << "video env: Nvidia";
+                    _video = VideoEnv::Nvidia;
+                }
+
+                QProcess lsmod;
+                lsmod.start("/sbin/lsmod");
+                if (lsmod.waitForStarted() && lsmod.waitForFinished()) {
+                    data = QString::fromUtf8(lsmod.readAllStandardOutput());
+                }
+
+                //FIXME: check dual video cards and detect which is in use 
+                //by Xorg now.
+                if (_video == VideoEnv::AMD && data.contains("fglrx")) {
+                    if (_voted == good_wm) {
+                        _envs.insert("COGL_DRIVER", "gl");
+                    }
+                } else if (_video == VideoEnv::Nvidia && data.contains("nvidia")) {
+                    //TODO: still need to test and verify
+                } else if (_video == VideoEnv::VirtualBox && !data.contains("vboxvideo")) {
+                    _voted = bad_wm;
+                } else if (_video == VideoEnv::VMWare && !data.contains("vmwgfx")) {
+                    _voted = bad_wm;
+                }
             }
 
             WMPointer getSupport() override {
                 return _voted;
             }
 
+            QProcessEnvironment additionalEnv() override {
+                return _envs;
+            }
+
         private:
             WMPointer _voted { wms.end() };
+            VideoEnv _video {VideoEnv::Unknown};
+            QProcessEnvironment _envs;
+
+            bool isDriverLoadedCorrectly() {
+                static QRegExp aiglx_err("\\(EE\\)\\s+AIGLX error");
+                static QRegExp dri_ok("direct rendering: DRI\\d+ enabled");
+
+                QString xorglog = QString("/var/log/Xorg.%1.log").arg(QX11Info::appScreen());
+                wmm_info() << "check " << xorglog;
+                QFile f(xorglog);
+                if (!f.open(QFile::ReadOnly)) {
+                    wmm_warning() << "can not open " << xorglog;
+                    return false;
+                }
+
+                QTextStream ts(&f);
+                while (!ts.atEnd()) {
+                    QString ln = ts.readLine();
+                    if (aiglx_err.indexIn(ln) != -1) {
+                        wmm_info() << "found aiglx error";
+                        return false;
+                    }
+
+                    if (dri_ok.indexIn(ln) != -1) {
+                        wmm_info() << "dri enabled successfully";
+                        return true;
+                    }
+                }
+
+                return true;
+            }
     };
 
     class WindowManagerMonitor: public QObject {
@@ -337,6 +436,9 @@ namespace wmm {
 
             virtual ~WindowManagerMonitor() {
                 if (_proc) delete _proc;
+            }
+
+            void updateWMEnvironments(const QProcessEnvironment& update) {
             }
 
         public slots:
@@ -491,11 +593,15 @@ namespace wmm {
             new EnvironmentChecker(),
         };
 
+        good_wm->env.clear();
+        bad_wm->env.clear();
+
         WindowManagerList::iterator p = good_wm;
         for (auto& rule: rules) {
-            if (rule->doTest(p)) {
-                p = rule->getSupport();
-                break;
+            rule->doTest(p);
+            p = rule->getSupport();
+            if (p != wms.end()) {
+                p->env.insert(rule->additionalEnv());
             }
         }
 
