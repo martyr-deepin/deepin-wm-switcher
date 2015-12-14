@@ -384,6 +384,7 @@ namespace wmm {
 
             void doSanityCheck() {
                 auto old = _current;
+                bool changed = false;
 
                 QString s = QString::fromUtf8(qgetenv("PATH"));
                 QString cmd = QStandardPaths::findExecutable(C2Q(good_wm->execName));
@@ -398,6 +399,7 @@ namespace wmm {
                         if (!fi_bad.exists() || !fi_bad.isExecutable()) {
                             _current = wms.end();
                         }
+                        changed = true;
                     }
 
                 } else if (_current == bad_wm) {
@@ -406,13 +408,17 @@ namespace wmm {
                         if (!fi_good.exists() || !fi_good.isExecutable()) {
                             _current = wms.end();
                         }
+                        changed = true;
                     }
 
-                } else _current = wms.end();
+                }
 
-                wmm_warning() << QString("%1: %2 -> %3").arg(__func__)
-                    .arg(old != wms.end() ? old->genericName.c_str() : "")
-                    .arg(_current != wms.end() ? _current->genericName.c_str() : "");
+                if (changed) {
+                    wmm_warning() << QString("%1: %2 -> %3").arg(__func__)
+                        .arg(old != wms.end() ? old->genericName.c_str() : "")
+                        .arg(_current != wms.end() ? _current->genericName.c_str() : "");
+                    _requestedNotify = nullptr;
+                }
             }
 
         private slots:
@@ -520,7 +526,6 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    // connect to D-Bus and register as an object:
     conn.registerObject("/com/deepin/wm_switcher", &app);
 #endif
 
