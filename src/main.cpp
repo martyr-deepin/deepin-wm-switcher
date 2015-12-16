@@ -284,15 +284,18 @@ namespace wmm {
                         wmm_info() << QString("machine: %1").arg(machine.c_str());
 
                         QRegExp re("x86.*|i?86|ia64", Qt::CaseInsensitive);
-                        if (re.exactMatch(C2Q(machine))) {
+                        if (re.indexIn(C2Q(machine)) != -1) {
+                            wmm_info() << "match x86";
                             _voted = good_wm;
                             switch_permission = ALLOW_BOTH;
 
-                        } else if (machine == "alpha") { // shenwei
+                        } else if (machine.find("alpha") != string::npos) { // shenwei
+                            wmm_info() << "match shenwei";
                             _voted = bad_wm;
                             switch_permission = ALLOW_NONE;
 
                         } else if (machine.find("mips") != string::npos) { // loongson
+                            wmm_info() << "match loongson";
                             //TODO: may need to check graphics card
                             _voted = good_wm;
                             switch_permission = ALLOW_BOTH;
@@ -426,36 +429,23 @@ namespace wmm {
         Q_OBJECT
         public:
             void start(const WindowManagerList::iterator& init_wm) {
-                _current = init_wm;
+                _voted = init_wm;
+
+                _current = _voted;
                 wmm_info() << QString("exec wm %1").arg(C2Q(_current->genericName));
 
                 spawn();
 
-                //QTimer::singleShot(CHECK_PERIOD, this, &WindowManagerMonitor::onTimeout);
+                QTimer::singleShot(CHECK_PERIOD, this, SLOT(onTimeout()));
             }
 
             virtual ~WindowManagerMonitor() {
                 if (_proc) delete _proc;
             }
 
-            void updateWMEnvironments(const QProcessEnvironment& update) {
-            }
-
         public slots:
             void onToggleWM() {
-                //TODO: setup rules
-                wmm_debug() << __func__ << "switch_permission = " << switch_permission;
-                switch (switch_permission) {
-                    case ALLOW_NONE: {
-                        if (_current == bad_wm) {
-                            _notify.notify3DError();
-                        }
-                        return;
-                    }
-                    case ALLOW_BOTH: break;
-                    case ALLOW_TO_2D: if (_current == bad_wm) return;
-                    case ALLOW_TO_3D: if (_current == good_wm) return;
-                }
+                if (!allowSwitch()) return;
 
                 WMPointer old = _current;
                 if (old == bad_wm) {
@@ -472,6 +462,7 @@ namespace wmm {
 
         private:
             WMPointer _current { wms.end() };
+            WMPointer _voted { wms.end() };
             QProcess* _proc {nullptr};
             NotifyHelper _notify;
             int _spawnCount {0};
@@ -483,6 +474,23 @@ namespace wmm {
             const int STARTUP_DELAY = 500;
             const int NOTIFY_DELAY = 600;
             const int KILL_TIMEOUT = 3000;
+
+            bool allowSwitch() {
+                wmm_debug() << __func__ << "switch_permission = " << switch_permission;
+                switch (switch_permission) {
+                    case ALLOW_NONE: {
+                        if (_current == bad_wm) {
+                            _notify.notify3DError();
+                        }
+                        return false;
+                    }
+                    case ALLOW_BOTH: break;
+                    case ALLOW_TO_2D: if (_current == bad_wm) return false;
+                    case ALLOW_TO_3D: if (_current == good_wm) return false;
+                }
+
+                return true;
+            }
 
             void doSanityCheck() {
                 auto old = _current;
@@ -572,7 +580,9 @@ namespace wmm {
 
                 if (status == QProcess::CrashExit || exitCode != 0) {
                     wmm_warning() << QString("%1 crashed or failure, switch wm").arg(_proc->program());
-                    _current = _current == good_wm ? bad_wm: good_wm;
+                    if (allowSwitch()) {
+                        _current = _current == good_wm ? bad_wm: good_wm;
+                    }
                 }
 
                 QTimer::singleShot(STARTUP_DELAY, this, SLOT(spawn()));
@@ -581,7 +591,7 @@ namespace wmm {
             void onTimeout() {
                 if (_current == wms.end()) {
                     wmm_warning() << "there is no wm running currently, try launch one";
-                    _current = apply_rules();
+                    _current = _voted;
                     spawn();
                 }
 
