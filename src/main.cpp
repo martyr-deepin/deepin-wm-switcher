@@ -82,7 +82,7 @@ static unsigned GetModifier( xcb_connection_t *p_connection, xcb_key_symbols_t *
 #else
 #define wmm_debug() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug() 
 #define wmm_warning() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).warning() 
-#define wmm_info() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).info() 
+#define wmm_info() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug() 
 #endif
 
 namespace wmm {
