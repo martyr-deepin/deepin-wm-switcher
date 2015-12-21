@@ -252,6 +252,66 @@ namespace wmm {
             }
     };
 
+    class Config: public QObject {
+        public:
+            void load() {
+                QString config_base = QStandardPaths::writableLocation(
+                        QStandardPaths::ConfigLocation);
+                if (config_base.isEmpty()) {
+                    config_base = QString("%1/.config").arg(QDir::homePath());
+                }
+
+                _path = QString("%1/deepin-wm-switcher/config.json").arg(config_base);
+                QDir dir(_path.path());
+                if (dir.exists() || dir.mkpath(_path.path())) {
+                    QFile f(_path.filePath());
+                    if (f.exists() && f.open(QIODevice::ReadOnly)) {
+                        QJsonParseError error;
+                        auto doc = QJsonDocument::fromJson(f.readAll(), &error);
+                        if (error.error != QJsonParseError::NoError) {
+                            wmm_warning() << error.errorString();
+                        }
+
+                        if (!doc.isNull()) {
+                            wmm_info() << "load config done";
+                            _jobj = doc.object();
+                        }
+                    }
+                } else {
+                    wmm_warning() << "config path does not exists or can not be made.";
+                }
+            }
+
+            bool save() {
+                QDir dir(_path.path());
+                if (!_path.exists() && !dir.mkpath(_path.path())) {
+                    return false;
+                }
+
+                QFile f(_path.filePath());
+                if (f.open(QIODevice::WriteOnly)) {
+                    QJsonDocument doc(_jobj);
+                    f.write(doc.toJson());
+                    f.flush();
+                } else {
+                    wmm_warning() << "can not open config file to save";
+                }
+            }
+
+            QString currentWM() {
+                return _jobj["last_wm"].toString();
+            }
+
+            void selectWM(const QString& wm) {
+                _jobj["last_wm"] = wm;
+                save();
+            }
+
+        private:
+            QJsonObject _jobj;
+            QFileInfo _path;
+    };
+
     class Rule {
         public:
             /**
@@ -425,6 +485,29 @@ namespace wmm {
             }
     };
 
+    static Config global_config;
+    class ConfigChecker: public Rule {
+        public:
+            void doTest(WMPointer base) override {
+                _voted = base;
+
+                global_config.load();
+                QString saved = global_config.currentWM();
+                if (saved == C2Q(good_wm->execName)) {
+                    _voted = good_wm;
+                } else if (saved == C2Q(bad_wm->execName)) {
+                    _voted = bad_wm;
+                }
+            }
+
+            WMPointer getSupport() override {
+                return _voted;
+            }
+
+        private:
+            WMPointer _voted { wms.end() };
+    };
+
     class WindowManagerMonitor: public QObject {
         Q_OBJECT
         public:
@@ -457,6 +540,10 @@ namespace wmm {
                 } else {
                     return;
                 }
+
+                if (_current != wms.end())
+                    global_config.selectWM(C2Q(_current->execName));
+
                 spawn();
             }
 
@@ -605,6 +692,7 @@ namespace wmm {
         vector<Rule*> rules = {
             new PlatformChecker(),
             new EnvironmentChecker(),
+            new ConfigChecker(),
         };
 
         good_wm->env.clear();
