@@ -349,7 +349,9 @@ namespace wmm {
                             _voted = good_wm;
                             switch_permission = ALLOW_BOTH;
 
-                        } else if (machine.find("alpha") != string::npos) { // shenwei
+                        } else if (machine.find("alpha") != string::npos 
+                                || machine.find("sw_64") != string::npos) {
+                            // shenwei
                             wmm_info() << "match shenwei";
                             _voted = bad_wm;
                             switch_permission = ALLOW_NONE;
