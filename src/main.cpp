@@ -568,9 +568,11 @@ namespace wmm {
                 wmm_debug() << __func__ << "switch_permission = " << switch_permission;
                 switch (switch_permission) {
                     case ALLOW_NONE: {
+#ifndef __alpha__
                         if (_current == bad_wm) {
                             _notify.notify3DError();
                         }
+#endif
                         return false;
                     }
                     case ALLOW_BOTH: break;
@@ -653,7 +655,9 @@ namespace wmm {
                     }
                 } 
 
+#ifndef __alpha__
                 QTimer::singleShot(NOTIFY_DELAY, this, SLOT(onDelayedNotify()));
+#endif
                 _spawnCount++;
             }
 
@@ -745,10 +749,12 @@ int main(int argc, char *argv[])
     auto p = wmm::apply_rules();
     wmMonitor.start(p);
 
+#ifndef __alpha__
 #if USE_BUILTIN_KEYBINDING
     QObject::connect(&xcbFilter, SIGNAL(toggleWM()), &wmMonitor, SLOT(onToggleWM()));
 #else
     QObject::connect(&dobj, SIGNAL(toggleWM()), &wmMonitor, SLOT(onToggleWM()));
+#endif
 #endif
 
     app.exec();
