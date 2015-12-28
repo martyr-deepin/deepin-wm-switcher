@@ -355,6 +355,7 @@ namespace wmm {
                             wmm_info() << "match shenwei";
                             _voted = bad_wm;
                             switch_permission = ALLOW_NONE;
+                            reduce_animations(true);
 
                         } else if (machine.find("mips") != string::npos) { // loongson
                             wmm_info() << "match loongson";
@@ -372,6 +373,15 @@ namespace wmm {
 
         private:
             WMPointer _voted { wms.end() };
+
+            void reduce_animations(bool val) {
+                QString cmd("gsettings set com.deepin.wrap.gnome.metacity reduced-resources %1");
+                QProcess proc;
+                proc.start(val ? cmd.arg("true") : cmd.arg("false"));
+                if (proc.waitForStarted() && proc.waitForFinished()) {
+                    wmm_info() << "set reduce_animations " << (val? "true" : "false") << " done";
+                }
+            }
     };
 
     class EnvironmentChecker: public Rule {
