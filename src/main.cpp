@@ -357,6 +357,8 @@ namespace wmm {
                             switch_permission = ALLOW_NONE;
 
                             _envs.insert("META_DEBUG_NO_SHADOW", "1");
+                            _envs.insert("META_IDLE_PAINT_MODE", "fixed"); 
+                            _envs.insert("META_IDLE_PAINT_FPS", "28"); 
                             reduce_animations(true);
 
                         } else if (machine.find("mips") != string::npos) { // loongson
