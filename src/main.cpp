@@ -355,6 +355,8 @@ namespace wmm {
                             wmm_info() << "match shenwei";
                             _voted = bad_wm;
                             switch_permission = ALLOW_NONE;
+
+                            _envs.insert("META_DEBUG_NO_SHADOW", "1");
                             reduce_animations(true);
 
                         } else if (machine.find("mips") != string::npos) { // loongson
@@ -371,8 +373,13 @@ namespace wmm {
                 return _voted;
             }
 
+            QProcessEnvironment additionalEnv() override {
+                return _envs;
+            }
+
         private:
             WMPointer _voted { wms.end() };
+            QProcessEnvironment _envs {};
 
             void reduce_animations(bool val) {
                 QString cmd("gsettings set com.deepin.wrap.gnome.metacity reduced-resources %1");
