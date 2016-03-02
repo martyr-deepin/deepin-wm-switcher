@@ -84,7 +84,7 @@ static unsigned GetModifier( xcb_connection_t *p_connection, xcb_key_symbols_t *
 }
 #endif
 
-#ifndef __alpha__
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 5, 0))
 #define wmm_debug() qDebug()
 #define wmm_warning() qWarning()
 #define wmm_info() qInfo()
@@ -373,6 +373,10 @@ namespace wmm {
                         } else if (machine.find("mips") != string::npos) { // loongson
                             wmm_info() << "match loongson";
                             //TODO: may need to check graphics card
+                            _voted = good_wm;
+                            switch_permission = ALLOW_BOTH;
+                        } else if (machine.find("arm") != string::npos) { // arm
+                            wmm_info() << "match arm";
                             _voted = good_wm;
                             switch_permission = ALLOW_BOTH;
                         }
