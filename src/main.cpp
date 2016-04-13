@@ -305,6 +305,8 @@ namespace wmm {
                 } else {
                     wmm_warning() << "can not open config file to save";
                 }
+
+                return true;
             }
 
             QString currentWM() {
@@ -408,13 +410,13 @@ namespace wmm {
 
     class EnvironmentChecker: public Rule {
         public:
-            enum VideoEnv {
-                Unknown,
-                Intel,
-                AMD,
-                Nvidia,
-                VirtualBox,
-                VMWare
+            struct VideoEnv {
+                static const int Unknown     = 0;
+                static const int Intel       = 0x0001;
+                static const int AMD         = 0x0002;
+                static const int Nvidia      = 0x0004;
+                static const int VirtualBox  = 0x0100;
+                static const int VMWare      = 0x0200;
             };
 
             void doTest(WMPointer base) override {
@@ -432,6 +434,8 @@ namespace wmm {
                     data = QString::fromUtf8(lspci.readAllStandardOutput());
                 }
 
+                _video = VideoEnv::Unknown;
+
                 static QRegExp vbox("vga.*virtualbox", Qt::CaseInsensitive);
                 static QRegExp vmware("vga.*vmware", Qt::CaseInsensitive);
                 static QRegExp intel("vga.*intel", Qt::CaseInsensitive);
@@ -439,21 +443,24 @@ namespace wmm {
                 static QRegExp nvidia("vga.*nvidia", Qt::CaseInsensitive);
 
                 if (vbox.indexIn(data) != -1) {
-                    wmm_info() << "video env: VirtualBox";
-                    _video = VideoEnv::VirtualBox;
+                    _video |= VideoEnv::VirtualBox;
                 } else if (vmware.indexIn(data) != -1) {
-                    wmm_info() << "video env: VMWare";
-                    _video = VideoEnv::VMWare;
+                    _video |= VideoEnv::VMWare;
                 } else if (intel.indexIn(data) != -1) {
-                    wmm_info() << "video env: Intel";
-                    _video = VideoEnv::Intel;
+                    _video |= VideoEnv::Intel;
                 } else if (amd.indexIn(data) != -1) {
-                    wmm_info() << "video env: AMD/ATI";
-                    _video = VideoEnv::AMD;
+                    _video |= VideoEnv::AMD;
                 } else if (nvidia.indexIn(data) != -1) {
-                    wmm_info() << "video env: Nvidia";
-                    _video = VideoEnv::Nvidia;
+                    _video |= VideoEnv::Nvidia;
                 }
+
+                string msg = "video env:";
+                if (_video & VideoEnv::VirtualBox) msg += " VirtualBox";
+                if (_video & VideoEnv::VMWare) msg += " VMWare";
+                if (_video & VideoEnv::Intel) msg += " Intel";
+                if (_video & VideoEnv::AMD) msg += " AMD";
+                if (_video & VideoEnv::Nvidia) msg += " Nvidia";
+                wmm_info() << msg.c_str();
 
                 QProcess lsmod;
                 lsmod.start("/sbin/lsmod");
@@ -486,7 +493,7 @@ namespace wmm {
 
         private:
             WMPointer _voted { wms.end() };
-            VideoEnv _video {VideoEnv::Unknown};
+            int _video {VideoEnv::Unknown};
             QProcessEnvironment _envs;
 
             bool isDriverLoadedCorrectly() {
