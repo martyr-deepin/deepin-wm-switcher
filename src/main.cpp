@@ -438,9 +438,9 @@ namespace wmm {
 
                 static QRegExp vbox("vga.*virtualbox", Qt::CaseInsensitive);
                 static QRegExp vmware("vga.*vmware", Qt::CaseInsensitive);
-                static QRegExp intel("vga.*intel", Qt::CaseInsensitive);
-                static QRegExp amd("vga.*ati", Qt::CaseInsensitive);
-                static QRegExp nvidia("vga.*nvidia", Qt::CaseInsensitive);
+                static QRegExp intel("(vga|3d).*intel", Qt::CaseInsensitive);
+                static QRegExp amd("(vga|3d).*ati", Qt::CaseInsensitive);
+                static QRegExp nvidia("(vga|3d).*nvidia", Qt::CaseInsensitive);
 
                 if (vbox.indexIn(data) != -1) {
                     _video |= VideoEnv::VirtualBox;
