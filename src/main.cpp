@@ -263,7 +263,11 @@ namespace wmm {
 
     class Config: public QObject {
         public:
+            Config() { load(); }
+
             void load() {
+                if (_loaded) return;
+
                 QString config_base = QStandardPaths::writableLocation(
                         QStandardPaths::ConfigLocation);
                 if (config_base.isEmpty()) {
@@ -289,6 +293,8 @@ namespace wmm {
                 } else {
                     wmm_warning() << "config path does not exists or can not be made.";
                 }
+
+                _loaded = true;
             }
 
             bool save() {
@@ -313,6 +319,15 @@ namespace wmm {
                 return _jobj["last_wm"].toString();
             }
 
+            bool allowSwitch() {
+                return _jobj["allow_switch"].toBool(true);
+            }
+
+            void setAllowSwitch(bool val) {
+                _jobj["allow_switch"] = val;
+                save();
+            }
+
             void selectWM(const QString& wm) {
                 _jobj["last_wm"] = wm;
                 save();
@@ -321,8 +336,10 @@ namespace wmm {
         private:
             QJsonObject _jobj;
             QFileInfo _path;
+            bool _loaded {false};
     };
 
+    static Config global_config;
     class Rule {
         public:
             /**
@@ -366,6 +383,7 @@ namespace wmm {
                             wmm_info() << "match shenwei";
                             _voted = bad_wm;
                             switch_permission = ALLOW_NONE;
+                            global_config.setAllowSwitch(false);
 
                             _envs.insert("META_DEBUG_NO_SHADOW", "1");
                             _envs.insert("META_IDLE_PAINT_MODE", "fixed"); 
@@ -376,7 +394,9 @@ namespace wmm {
                             wmm_info() << "match loongson";
                             //TODO: may need to check graphics card
                             _voted = good_wm;
-                            switch_permission = ALLOW_BOTH;
+                            switch_permission = ALLOW_NONE;
+                            global_config.setAllowSwitch(false);
+
                         } else if (machine.find("arm") != string::npos) { // arm
                             wmm_info() << "match arm";
                             _voted = good_wm;
@@ -526,7 +546,6 @@ namespace wmm {
             }
     };
 
-    static Config global_config;
     class ConfigChecker: public Rule {
         public:
             void doTest(WMPointer base) override {
@@ -788,13 +807,13 @@ int main(int argc, char *argv[])
     auto p = wmm::apply_rules();
     wmMonitor.start(p);
 
-#ifndef __alpha__
+    if (global_config.allowSwitch()) {
 #if USE_BUILTIN_KEYBINDING
-    QObject::connect(&xcbFilter, SIGNAL(toggleWM()), &wmMonitor, SLOT(onToggleWM()));
+        QObject::connect(&xcbFilter, SIGNAL(toggleWM()), &wmMonitor, SLOT(onToggleWM()));
 #else
-    QObject::connect(&dobj, SIGNAL(toggleWM()), &wmMonitor, SLOT(onToggleWM()));
+        QObject::connect(&dobj, SIGNAL(toggleWM()), &wmMonitor, SLOT(onToggleWM()));
 #endif
-#endif
+    }
 
     app.exec();
 
