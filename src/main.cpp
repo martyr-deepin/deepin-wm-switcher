@@ -89,9 +89,9 @@ static unsigned GetModifier( xcb_connection_t *p_connection, xcb_key_symbols_t *
 #define wmm_warning() qWarning()
 #define wmm_info() qInfo()
 #else
-#define wmm_debug() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug() 
-#define wmm_warning() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).warning() 
-#define wmm_info() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug() 
+#define wmm_debug() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug()
+#define wmm_warning() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).warning()
+#define wmm_info() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug()
 #endif
 
 namespace wmm {
@@ -240,24 +240,18 @@ namespace wmm {
     class NotifyHelper: public QObject {
         Q_OBJECT
         public:
-            void notifyStart3D() {
-                exec(QString("%1 %2").arg(_cmd).arg("--SwitchWM3D"));
-            }
+            void notifyStart3D() { osd("SwitchWM3D"); }
 
-            void notifyStart2D() {
-                exec(QString("%1 %2").arg(_cmd).arg("--SwitchWM2D"));
-            }
+            void notifyStart2D() { osd("SwitchWM2D"); }
 
-            void notify3DError() {
-                exec(QString("%1 %2").arg(_cmd).arg("--SwitchWMError"));
-            }
+            void notify3DError() { osd("SwitchWMError"); }
 
         private:
-            QString _cmd {"/usr/lib/deepin-daemon/dde-osd"};
-
-            void exec(QString program) {
-                QProcess p;
-                p.startDetached(program);
+            void osd(QString name) {
+                QDBusInterface ifce("com.deepin.dde.osd",
+                                     "/",
+                                     "com.deepin.dde.osd");
+                ifce.asyncCall("ShowOSD", name);
             }
     };
 
@@ -350,7 +344,7 @@ namespace wmm {
              * wm that this Rule recommends most
              */
             virtual WMPointer getSupport() = 0;
-            /** 
+            /**
              * some changes needed in the environment
              */
             virtual QProcessEnvironment additionalEnv() {
@@ -377,7 +371,7 @@ namespace wmm {
                             _voted = good_wm;
                             switch_permission = ALLOW_BOTH;
 
-                        } else if (machine.find("alpha") != string::npos 
+                        } else if (machine.find("alpha") != string::npos
                                 || machine.find("sw_64") != string::npos) {
                             // shenwei
                             wmm_info() << "match shenwei";
@@ -386,8 +380,8 @@ namespace wmm {
                             global_config.setAllowSwitch(false);
 
                             _envs.insert("META_DEBUG_NO_SHADOW", "1");
-                            _envs.insert("META_IDLE_PAINT_MODE", "fixed"); 
-                            _envs.insert("META_IDLE_PAINT_FPS", "28"); 
+                            _envs.insert("META_IDLE_PAINT_MODE", "fixed");
+                            _envs.insert("META_IDLE_PAINT_FPS", "28");
                             reduce_animations(true);
 
                         } else if (machine.find("mips") != string::npos) { // loongson
@@ -488,7 +482,7 @@ namespace wmm {
                     data = QString::fromUtf8(lsmod.readAllStandardOutput());
                 }
 
-                //FIXME: check dual video cards and detect which is in use 
+                //FIXME: check dual video cards and detect which is in use
                 //by Xorg now.
                 if (_video == VideoEnv::AMD && data.contains("fglrx")) {
                     if (_voted == good_wm) {
@@ -701,7 +695,7 @@ namespace wmm {
                 auto sys_env = QProcessEnvironment::systemEnvironment();
                 sys_env.insert(_current->env);
 
-                connect(_proc, SIGNAL(finished(int, QProcess::ExitStatus)), 
+                connect(_proc, SIGNAL(finished(int, QProcess::ExitStatus)),
                             this, SLOT(onWMProcFinished(int, QProcess::ExitStatus)));
                 _proc->setProcessEnvironment(sys_env);
                 _proc->start(C2Q(_current->execName), QStringList() << "--replace");
@@ -711,7 +705,7 @@ namespace wmm {
                     if (switch_permission != ALLOW_BOTH && _current == good_wm) {
                         _requestedNotify = &NotifyHelper::notify3DError;
                     }
-                } 
+                }
 
 #ifndef __alpha__
                 QTimer::singleShot(NOTIFY_DELAY, this, SLOT(onDelayedNotify()));
