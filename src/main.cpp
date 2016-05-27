@@ -314,6 +314,9 @@ namespace wmm {
             }
 
             bool allowSwitch() {
+                if (!_jobj["allow_switch"].isBool()) {
+                    _jobj["allow_switch"] = true;
+                }
                 return _jobj["allow_switch"].toBool(true);
             }
 
