@@ -317,7 +317,7 @@ namespace wmm {
                 if (!_jobj["allow_switch"].isBool()) {
                     _jobj["allow_switch"] = true;
                 }
-                return _jobj["allow_switch"].toBool(true);
+                return static_cast<QJsonObject&>(_jobj)["allow_switch"].toBool(true);
             }
 
             void setAllowSwitch(bool val) {
