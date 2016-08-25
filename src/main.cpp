@@ -623,7 +623,7 @@ namespace wmm {
                 wmm_debug() << __func__ << "switch_permission = " << switch_permission;
                 switch (switch_permission) {
                     case ALLOW_NONE: {
-#ifndef __alpha__
+#if !defined(__alpha__) && !defined(__sw_64__)
                         if (_current == bad_wm) {
                             _notify.notify3DError();
                         }
@@ -710,7 +710,7 @@ namespace wmm {
                     }
                 }
 
-#ifndef __alpha__
+#if !defined(__alpha__) && !defined(__sw_64__)
                 QTimer::singleShot(NOTIFY_DELAY, this, SLOT(onDelayedNotify()));
 #endif
                 _spawnCount++;
