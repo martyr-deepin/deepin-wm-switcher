@@ -8,9 +8,11 @@
  **/
 
 #include <glib.h>
+#include <unistd.h>
 #include <iostream>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 #include <QtGlobal>
 #include <QtGui>
@@ -543,6 +545,106 @@ namespace wmm {
             }
     };
 
+	class PlatformOverrideChecker: public Rule {
+		public:
+			void doTest(WMPointer base) override {
+				_voted = base;
+                QProcess uname;
+                uname.start("uname -m");
+                if (uname.waitForStarted() && uname.waitForFinished()) {
+                    auto data = uname.readAllStandardOutput();
+                    string machine(data.trimmed().constData());
+                    wmm_info() << QString("machine: %1").arg(machine.c_str());
+
+                    if (machine.find("alpha") != string::npos
+                            || machine.find("sw_64") != string::npos) {
+                        if (is_radeon_exists()) {
+                            _voted = good_wm;
+                            wmm_info() << QString("override wm on shenwei: %1 -> %2")
+                                .arg(C2Q(base->genericName)).arg(C2Q(_voted->genericName));
+                        }
+                    }
+                }
+			}
+
+			WMPointer getSupport() override {
+				return _voted;
+			}
+
+			QProcessEnvironment additionalEnv() override {
+				return _envs;
+			}
+
+		private:
+			WMPointer _voted { wms.end() };
+			QProcessEnvironment _envs;
+
+			bool is_device_viable(int id) {
+				char path[128];
+				snprintf(path, sizeof path, "/sys/class/drm/card%d", id);
+				if (access(path, F_OK) != 0) {
+					return false;
+				}
+
+				char buf[512];
+				snprintf(buf, sizeof buf, "%s/device/enable", path);
+
+				FILE* fp = fopen(buf, "r");
+				if (!fp) {
+					return false;
+				}
+
+				int enabled = 0;
+				fscanf(fp, "%d", &enabled);
+				fclose(fp);
+
+				// nouveau write 2, others 1
+				return enabled > 0;
+			}
+
+			bool is_card_exists(const vector<string>& vs, const vector<string>& drivers) {
+				for (auto card: vs) {
+					char buf[1024] = {0};
+					int id = std::stoi(card.substr(card.size()-1));
+					snprintf(buf, sizeof buf, "/sys/class/drm/card%d/device/driver", id);
+
+					char buf2[1024] = {0};
+					if (readlink(buf, buf2, sizeof buf2) < 0) {
+                        return false;
+                    }
+
+					string driver = basename(buf2);
+                    if (std::any_of(drivers.cbegin(), drivers.cend(), [=](string s) {
+                                return s == driver;
+                            })) {
+						return true;
+					} 
+				}
+
+				return false;
+			}
+
+            bool is_radeon_exists() {
+                vector<string> viables;
+                string card = "/dev/dri/card0";
+                const char* const tmpl = "/dev/dri/card%d";
+                for (int i = 0; i < 4; i++) {
+                    char buf[128];
+                    snprintf(buf, 127, tmpl, i);
+                    if (is_device_viable(i)) {
+                        viables.push_back(buf);
+                    }
+                }
+
+                if (viables.size() == 0) {
+                    return false;
+                }
+
+                vector<string> drivers = {"radeon", "fglrx", "amdgpu"};
+                return is_card_exists(viables, drivers);
+            }
+	};
+
     class ConfigChecker: public Rule {
         public:
             void doTest(WMPointer base) override {
@@ -753,6 +855,7 @@ namespace wmm {
         vector<Rule*> rules = {
             new PlatformChecker(),
             new EnvironmentChecker(),
+            new PlatformOverrideChecker(),
             new ConfigChecker(),
         };
 
