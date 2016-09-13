@@ -364,6 +364,7 @@ namespace wmm {
 
                 QProcess uname;
                 uname.start("uname -m");
+                switch_permission = ALLOW_BOTH;
                 if (uname.waitForStarted()) {
                     if (uname.waitForFinished()) {
                         auto data = uname.readAllStandardOutput();
@@ -374,15 +375,12 @@ namespace wmm {
                         if (re.indexIn(C2Q(machine)) != -1) {
                             wmm_info() << "match x86";
                             _voted = good_wm;
-                            switch_permission = ALLOW_BOTH;
 
                         } else if (machine.find("alpha") != string::npos
                                 || machine.find("sw_64") != string::npos) {
                             // shenwei
                             wmm_info() << "match shenwei";
                             _voted = bad_wm;
-                            switch_permission = ALLOW_NONE;
-                            global_config.setAllowSwitch(false);
 
                             _envs.insert("META_DEBUG_NO_SHADOW", "1");
                             _envs.insert("META_IDLE_PAINT_MODE", "fixed");
@@ -393,13 +391,10 @@ namespace wmm {
                             wmm_info() << "match loongson";
                             //TODO: may need to check graphics card
                             _voted = good_wm;
-                            switch_permission = ALLOW_NONE;
-                            global_config.setAllowSwitch(false);
 
                         } else if (machine.find("arm") != string::npos) { // arm
                             wmm_info() << "match arm";
                             _voted = good_wm;
-                            switch_permission = ALLOW_BOTH;
                         }
                     }
                 }
@@ -586,20 +581,37 @@ namespace wmm {
 					return false;
 				}
 
+                //OK, on shenwei, this file may have no read permission for group/other.
 				char buf[512];
 				snprintf(buf, sizeof buf, "%s/device/enable", path);
+                if (access(buf, R_OK) == 0) {
+                    FILE* fp = fopen(buf, "r");
+                    if (!fp) {
+                        return false;
+                    }
 
-				FILE* fp = fopen(buf, "r");
-				if (!fp) {
-					return false;
-				}
+                    int enabled = 0;
+                    fscanf(fp, "%d", &enabled);
+                    fclose(fp);
 
-				int enabled = 0;
-				fscanf(fp, "%d", &enabled);
-				fclose(fp);
+                    // nouveau write 2, others 1
+                    return enabled > 0;
+                } else {
+                    QProcess xdriinfo;
+                    xdriinfo.start("xdriinfo driver 0");
+                    if (xdriinfo.waitForStarted() && xdriinfo.waitForFinished()) {
+                        string drv(xdriinfo.readAllStandardOutput().trimmed().constData());
 
-				// nouveau write 2, others 1
-				return enabled > 0;
+                        wmm_info() << QString::fromUtf8(buf) << " is unreadable, try xdriinfo: " << C2Q(drv);
+                        vector<string> dris {"r600", "r300", "r200", "radeon"};
+                        if (std::any_of(dris.cbegin(), dris.cend(), [=](string s) {
+                                    return s == drv;
+                                })) {
+                            return true;
+                        } 
+                    }
+                    return false;
+                }
 			}
 
 			bool is_card_exists(const vector<string>& vs, const vector<string>& drivers) {
@@ -625,6 +637,7 @@ namespace wmm {
 			}
 
             bool is_radeon_exists() {
+                wmm_info() << "checking radeon card";
                 vector<string> viables;
                 string card = "/dev/dri/card0";
                 const char* const tmpl = "/dev/dri/card%d";
