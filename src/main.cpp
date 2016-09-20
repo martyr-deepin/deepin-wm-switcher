@@ -794,18 +794,13 @@ namespace wmm {
 
         private slots:
             void spawn() {
-                if (_proc && _proc->state() == QProcess::Running) {
-                    wmm_warning() << QString("%1 is running, force it to terminate").arg(_proc->program());
-                    _proc->disconnect();
-                    _proc->kill();
-                    while (!_proc->waitForFinished(KILL_TIMEOUT)) {
-                        _proc->kill();
-                    }
+                QProcess* prev_proc = _proc;
+                if (prev_proc && prev_proc->state() == QProcess::Running) {
+                    wmm_warning() << QString("%1 is running, force it to terminate").arg(prev_proc->program());
+                    prev_proc->disconnect();
                 }
 
-                if (!_proc) {
-                    _proc = new QProcess;
-                }
+                _proc = new QProcess;
 
                 doSanityCheck();
                 if (_current == wms.end()) return;
@@ -824,6 +819,8 @@ namespace wmm {
                         _requestedNotify = &NotifyHelper::notify3DError;
                     }
                 }
+
+                delete prev_proc;
 
 #if !defined(__alpha__) && !defined(__sw_64__)
                 QTimer::singleShot(NOTIFY_DELAY, this, SLOT(onDelayedNotify()));
