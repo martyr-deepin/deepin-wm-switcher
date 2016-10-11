@@ -596,22 +596,9 @@ namespace wmm {
 
                     // nouveau write 2, others 1
                     return enabled > 0;
-                } else {
-                    QProcess xdriinfo;
-                    xdriinfo.start("xdriinfo driver 0");
-                    if (xdriinfo.waitForStarted() && xdriinfo.waitForFinished()) {
-                        string drv(xdriinfo.readAllStandardOutput().trimmed().constData());
-
-                        wmm_info() << QString::fromUtf8(buf) << " is unreadable, try xdriinfo: " << C2Q(drv);
-                        vector<string> dris {"r600", "r300", "r200", "radeon"};
-                        if (std::any_of(dris.cbegin(), dris.cend(), [=](string s) {
-                                    return s == drv;
-                                })) {
-                            return true;
-                        } 
-                    }
-                    return false;
                 }
+
+                return false;
 			}
 
 			bool is_card_exists(const vector<string>& vs, const vector<string>& drivers) {
@@ -626,6 +613,7 @@ namespace wmm {
                     }
 
 					string driver = basename(buf2);
+                    wmm_info() << "test driver: " << C2Q(driver);
                     if (std::any_of(drivers.cbegin(), drivers.cend(), [=](string s) {
                                 return s == driver;
                             })) {
@@ -635,6 +623,23 @@ namespace wmm {
 
 				return false;
 			}
+
+            bool dri_is_radeon() {
+                QProcess xdriinfo;
+                xdriinfo.start("xdriinfo driver 0");
+                if (xdriinfo.waitForStarted() && xdriinfo.waitForFinished()) {
+                    string drv(xdriinfo.readAllStandardOutput().trimmed().constData());
+
+                    wmm_info() << "drm info is unreadable, try xdriinfo: " << C2Q(drv);
+                    vector<string> dris {"r600", "r300", "r200", "radeon"};
+                    if (std::any_of(dris.cbegin(), dris.cend(), [=](string s) {
+                                return s == drv;
+                            })) {
+                        return true;
+                    } 
+                }
+                return false;
+            }
 
             bool is_radeon_exists() {
                 wmm_info() << "checking radeon card";
@@ -649,12 +654,13 @@ namespace wmm {
                     }
                 }
 
-                if (viables.size() == 0) {
-                    return false;
+                if (viables.size() > 0) {
+                    vector<string> drivers = {"radeon", "fglrx", "amdgpu"};
+                    return is_card_exists(viables, drivers);
+                } else {
+                    return dri_is_radeon();
                 }
 
-                vector<string> drivers = {"radeon", "fglrx", "amdgpu"};
-                return is_card_exists(viables, drivers);
             }
 	};
 
