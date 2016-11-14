@@ -1,0 +1,13 @@
+Source: deepin-wm-switcher
+Section: devel
+Priority: optional
+Maintainer: Deepin Sysdev <sysdev@deepin.com>
+Build-Depends: debhelper (>= 9), cmake, clang, libx11-dev ,libx11-xcb-dev, libqt5x11extras5-dev, qtbase5-dev, libxcb-keysyms1-dev, libglib2.0-dev,
+Standards-Version: 3.9.6
+Homepage: http://www.deepin.com
+
+Package: deepin-wm-switcher
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: deepin window manager monitoring and auto-switching service
+ deepin window manager monitoring and auto-switching service.
