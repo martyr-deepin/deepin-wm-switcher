@@ -557,6 +557,8 @@ namespace wmm {
                             _voted = good_wm;
                             wmm_info() << QString("override wm on shenwei: %1 -> %2")
                                 .arg(C2Q(base->genericName)).arg(C2Q(_voted->genericName));
+                        } else {
+                            switch_permission = ALLOW_NONE;
                         }
                     }
                 }
@@ -671,6 +673,9 @@ namespace wmm {
 
                 global_config.load();
                 QString saved = global_config.currentWM();
+                if (!global_config.allowSwitch()) {
+                    switch_permission = ALLOW_NONE;
+                }
                 if (saved == C2Q(good_wm->execName)) {
                     _voted = good_wm;
                 } else if (saved == C2Q(bad_wm->execName)) {
