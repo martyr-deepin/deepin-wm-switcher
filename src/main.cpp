@@ -450,11 +450,11 @@ namespace wmm {
 
                 _video = VideoEnv::Unknown;
 
-                static QRegExp vbox("vga.*virtualbox", Qt::CaseInsensitive);
-                static QRegExp vmware("vga.*vmware", Qt::CaseInsensitive);
-                static QRegExp intel("(vga|3d).*intel", Qt::CaseInsensitive);
-                static QRegExp amd("(vga|3d).*ati", Qt::CaseInsensitive);
-                static QRegExp nvidia("(vga|3d).*nvidia", Qt::CaseInsensitive);
+                static QRegExp vbox("vga.* virtualbox", Qt::CaseInsensitive);
+                static QRegExp vmware("vga.* vmware", Qt::CaseInsensitive);
+                static QRegExp intel("(vga|3d).* intel", Qt::CaseInsensitive);
+                static QRegExp amd("(vga|3d).* ati", Qt::CaseInsensitive);
+                static QRegExp nvidia("(vga|3d).* nvidia", Qt::CaseInsensitive);
 
                 if (vbox.indexIn(data) != -1) {
                     _video |= VideoEnv::VirtualBox;
@@ -513,6 +513,7 @@ namespace wmm {
             bool isDriverLoadedCorrectly() {
                 static QRegExp aiglx_err("\\(EE\\)\\s+AIGLX error");
                 static QRegExp dri_ok("direct rendering: DRI\\d+ enabled");
+                static QRegExp swrast("GLX: Initialized DRISWRAST");
 
                 QString xorglog = QString("/var/log/Xorg.%1.log").arg(QX11Info::appScreen());
                 wmm_info() << "check " << xorglog;
@@ -533,6 +534,11 @@ namespace wmm {
                     if (dri_ok.indexIn(ln) != -1) {
                         wmm_info() << "dri enabled successfully";
                         return true;
+                    }
+
+                    if (swrast.indexIn(ln) != -1) {
+                        wmm_info() << "swrast driver used";
+                        return false;
                     }
                 }
 
@@ -558,6 +564,7 @@ namespace wmm {
                             wmm_info() << QString("override wm on shenwei: %1 -> %2")
                                 .arg(C2Q(base->genericName)).arg(C2Q(_voted->genericName));
                         } else {
+                            wmm_info() << QString("no radeon card, disallow switch");
                             switch_permission = ALLOW_NONE;
                         }
                     }
