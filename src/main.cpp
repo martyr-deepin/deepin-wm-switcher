@@ -698,6 +698,80 @@ namespace wmm {
             WMPointer _voted { wms.end() };
     };
 
+    struct ActionInterface {
+        virtual void on_good_wm() = 0;
+        virtual void on_bad_wm() = 0;
+        virtual string name() = 0;
+    };
+
+    class SogouAction: public ActionInterface {
+        public:
+            void on_good_wm () override {
+                if (!_currentSkin.isEmpty()) {
+                    setSkin(_currentSkin.toStdString());
+                    QProcess::execute("killall sogou-qimpanel");
+                }
+            }
+
+            void on_bad_wm () override {
+                saveSkin();
+                setSkin("默认皮肤");
+                QProcess::execute("killall sogou-qimpanel");
+            }
+
+            string name() override {
+                return "update sogou skin";
+            }
+
+        private:
+            QString _currentSkin;
+
+            void setSkin(const string& skin) {
+                QFile f(QDir::homePath() + QString::fromUtf8("/.config/sogou-qimpanel/main.conf"));
+                if (!f.open(QIODevice::ReadWrite)) {
+                    wmm_warning() << __func__ << "conf open failed";
+                    return;
+                }
+
+                QVector<QString> data;
+
+                QTextStream ts(&f);
+                while (!ts.atEnd()) {
+                    QString l = ts.readLine();
+                    if (l.startsWith("CurtSogouSkinType")) {
+                        l = QString("CurtSogouSkinType=%1").arg(C2Q(skin));
+                        wmm_info() << "replace skin: " << l;
+                    }
+                    data.push_back(l);
+                }
+
+                f.close();
+
+                f.open(QIODevice::Truncate|QIODevice::WriteOnly);
+                for (auto& l: data) {
+                    ts << l << endl;
+                }
+            }
+
+            void saveSkin() {
+                QFile f(QDir::homePath() + QString::fromUtf8("/.config/sogou-qimpanel/main.conf"));
+                if (!f.open(QIODevice::ReadOnly)) {
+                    wmm_warning() << __func__ << "conf open failed";
+                    return;
+                }
+
+                QTextStream ts(&f);
+                while (!ts.atEnd()) {
+                    QString l = ts.readLine();
+                    if (l.startsWith("CurtSogouSkinType")) {
+                        _currentSkin = l.replace("CurtSogouSkinType=", "");
+                        wmm_info() << "save current skin: " << _currentSkin;
+                        break;
+                    }
+                }
+            }
+    };
+
     class WindowManagerMonitor: public QObject {
         Q_OBJECT
         public:
@@ -706,6 +780,8 @@ namespace wmm {
 
                 _current = _voted;
                 wmm_info() << QString("exec wm %1").arg(C2Q(_current->genericName));
+
+                _actions.emplace_back(new SogouAction());
 
                 spawn();
 
@@ -741,6 +817,7 @@ namespace wmm {
             WMPointer _current { wms.end() };
             WMPointer _voted { wms.end() };
             QProcess* _proc {nullptr};
+            vector<ActionInterface*> _actions;
             NotifyHelper _notify;
             int _spawnCount {0};
 
@@ -833,10 +910,28 @@ namespace wmm {
                     }
                 }
 
+                do_post_actions(_current);
+
                 delete prev_proc;
 
                 QTimer::singleShot(NOTIFY_DELAY, this, SLOT(onDelayedNotify()));
                 _spawnCount++;
+            }
+
+            void do_post_actions(WMPointer current) {
+                if (current == good_wm) {
+                    wmm_info() << __func__ << "on good wm";
+                    for (auto *act: _actions) {
+                        wmm_info() << __func__ << C2Q(act->name());
+                        act->on_good_wm();
+                    }
+                } else if (current == bad_wm) {
+                    wmm_info() << __func__ << "on bad wm";
+                    for (auto *act: _actions) {
+                        wmm_info() << __func__ << C2Q(act->name());
+                        act->on_bad_wm();
+                    }
+                }
             }
 
             void onDelayedNotify() {
