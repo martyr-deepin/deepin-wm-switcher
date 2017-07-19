@@ -220,20 +220,26 @@ namespace wmm {
 
 #else
 
-    class MyRemoteRequestHandler: public QDBusAbstractAdaptor {
+    class WindowManagerMonitor;
+    class MyRemoteRequestHandler: public QDBusAbstractAdaptor
+    {
         Q_OBJECT
         Q_CLASSINFO("D-Bus Interface", "com.deepin.wm_switcher")
         public:
-            MyRemoteRequestHandler(QObject* parent): QDBusAbstractAdaptor(parent) {
-            }
+            MyRemoteRequestHandler(WindowManagerMonitor* parent);
 
         public slots:
             void requestSwitchWM() {
                 emit toggleWM();
             }
 
+            const QString currentWM() const;
+
         signals:
             void toggleWM();
+
+        private:
+            WindowManagerMonitor *_parent;
     };
 
 #endif
@@ -788,6 +794,10 @@ namespace wmm {
                 QTimer::singleShot(CHECK_PERIOD, this, SLOT(onTimeout()));
             }
 
+            const QString currentWM() const {
+                return C2Q(_current->genericName);
+            }
+
             virtual ~WindowManagerMonitor() {
                 if (_proc) delete _proc;
             }
@@ -993,7 +1003,20 @@ namespace wmm {
 
         return p;
     }
-};
+
+    // must after WindowManagerMonitor definition
+    MyRemoteRequestHandler::MyRemoteRequestHandler(WindowManagerMonitor *parent)
+        : QDBusAbstractAdaptor(parent),
+          _parent(parent)
+    {
+
+    }
+
+    const QString MyRemoteRequestHandler::currentWM() const
+    {
+        return _parent->currentWM();
+    }
+}
 
 
 using namespace wmm;
@@ -1006,7 +1029,10 @@ int main(int argc, char *argv[])
     wmm::MyShortcutManager xcbFilter;
     app.installNativeEventFilter(&xcbFilter);
 #else
-    wmm::MyRemoteRequestHandler dobj(&app);
+
+
+    wmm::WindowManagerMonitor wmMonitor;
+    wmm::MyRemoteRequestHandler dobj(&wmMonitor);
 
     auto conn = QDBusConnection::sessionBus();
     if (!conn.registerService("com.deepin.wm_switcher")) {
@@ -1014,11 +1040,8 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    conn.registerObject("/com/deepin/wm_switcher", &app);
+    conn.registerObject("/com/deepin/wm_switcher", &wmMonitor);
 #endif
-
-
-    wmm::WindowManagerMonitor wmMonitor;
 
     auto p = wmm::apply_rules();
     wmMonitor.start(p);
