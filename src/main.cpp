@@ -263,6 +263,104 @@ namespace wmm {
             }
     };
 
+    struct Card {
+        QString vendor_id;
+        QString dev_id;
+    };
+    bool operator==(const Card& self, const Card &other) {
+        return self.vendor_id == other.vendor_id && self.dev_id == other.dev_id;
+    }
+
+    QDebug operator<<(QDebug debug, const Card &c) {
+        QDebugStateSaver saver(debug);
+        debug.nospace() << "[" << c.vendor_id << ":" << c.dev_id << "]";
+        return debug;
+    }
+
+    class Settings: public QObject {
+        public:
+            Settings() {
+                QString config_base = QStandardPaths::writableLocation(
+                        QStandardPaths::ConfigLocation);
+                if (config_base.isEmpty()) {
+                    config_base = QString("%1/.config").arg(QDir::homePath());
+                }
+
+                _cfgFilePath = QString("%1/deepin-wm-switcher/cards.ini").arg(config_base);
+
+                auto l2 = loadEnv();
+                if (_cfgFilePath.exists()) {
+                    auto l1 = loadSettings();
+                    _changed = l1 != l2;
+                }
+                saveSettings(l2);
+            }
+            
+            bool isCardsChanged() const { return _changed; }
+
+        private:
+            QFileInfo _cfgFilePath;
+            bool _changed {false};
+			
+
+            void saveSettings(const QList<Card>& cards) {
+                QSettings cfg(_cfgFilePath.filePath(), QSettings::NativeFormat);
+                cfg.clear();
+                cfg.beginWriteArray("cards");
+                for (int i = 0; i < cards.size(); ++i) {
+                    cfg.setArrayIndex(i);
+                    cfg.setValue("vendor_id", cards[i].vendor_id);
+                    cfg.setValue("dev_id", cards[i].dev_id);
+                }
+                cfg.endArray();
+                qDebug() << "save cards" << cards;
+                cfg.sync();
+            }
+
+            QList<Card> loadSettings() {
+                QList<Card> cards;
+
+                QSettings cfg(_cfgFilePath.filePath(), QSettings::NativeFormat);
+                int size = cfg.beginReadArray("cards");
+                for (int i = 0; i < size; ++i) {
+                    cfg.setArrayIndex(i);
+                    Card c;
+                    c.vendor_id = cfg.value("vendor_id").toString();
+                    c.dev_id = cfg.value("dev_id").toString();
+                    cards.append(c);
+                }
+                cfg.endArray();
+
+                qDebug() << "load cards" << cards;
+                return cards;
+            }
+
+            QList<Card> loadEnv() {
+                QList<Card> cards;
+
+                QString data;
+                QProcess lspci;
+                lspci.start("lspci -nn");
+                if (lspci.waitForStarted() && lspci.waitForFinished()) {
+                    data = QString::fromUtf8(lspci.readAllStandardOutput());
+                }
+
+                QStringList vcards;
+                QRegExp re_vcard("(vga|3d).*(display|graphics)", Qt::CaseInsensitive);
+                QRegExp re_ids("\\[(\\w{4}):(\\w{4})\\]", Qt::CaseInsensitive);
+                QStringList sl = data.split("\n");
+                for (const auto& s: sl) {
+                    if (re_vcard.indexIn(s) != -1) {
+                        re_ids.indexIn(s);
+                        cards.append({re_ids.cap(1), re_ids.cap(2)});
+                    }
+                }
+
+                wmm_info() << "found cards" << cards;
+                return cards;
+            }
+    };
+
     class Config: public QObject {
         public:
             Config() { load(); }
@@ -344,6 +442,7 @@ namespace wmm {
             bool _loaded {false};
     };
 
+    static Settings global_settings;
     static Config global_config;
     class Rule {
         public:
@@ -683,8 +782,17 @@ namespace wmm {
         public:
             void doTest(WMPointer base) override {
                 _voted = base;
-
                 global_config.load();
+
+                // if cards list changed, use probed result instead of config
+                // (which might be stale at this moment).
+                if (global_settings.isCardsChanged()) {
+                    wmm_info() << "detect cards changed, ignore config";
+                    global_config.selectWM(C2Q(_voted->execName));
+                    global_config.setAllowSwitch(switch_permission != ALLOW_NONE);
+                    return;
+                }
+
                 QString saved = global_config.currentWM();
                 if (!global_config.allowSwitch()) {
                     switch_permission = ALLOW_NONE;
