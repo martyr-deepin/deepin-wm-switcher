@@ -346,7 +346,7 @@ namespace wmm {
                 }
 
                 QStringList vcards;
-                QRegExp re_vcard("(vga|3d).*(display|graphics)", Qt::CaseInsensitive);
+                QRegExp re_vcard(" (vga|3d).*(display|graphics|controller)", Qt::CaseInsensitive);
                 QRegExp re_ids("\\[(\\w{4}):(\\w{4})\\]", Qt::CaseInsensitive);
                 QStringList sl = data.split("\n");
                 for (const auto& s: sl) {
