@@ -368,13 +368,12 @@ namespace wmm {
             void load() {
                 if (_loaded) return;
 
-                QString config_base = QStandardPaths::writableLocation(
-                        QStandardPaths::ConfigLocation);
+                QString config_base = QStandardPaths::writableLocation( QStandardPaths::ConfigLocation);
                 if (config_base.isEmpty()) {
                     config_base = QString("%1/.config").arg(QDir::homePath());
                 }
 
-                _path = QString("%1/deepin-wm-switcher/config.json").arg(config_base);
+                _path = QString("%1/deepin/deepin-wm-switcher/config.json").arg(config_base);
                 QDir dir(_path.path());
                 if (dir.exists() || dir.mkpath(_path.path())) {
                     QFile f(_path.filePath());
