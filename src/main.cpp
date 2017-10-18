@@ -913,6 +913,17 @@ namespace wmm {
             void onToggleWM() {
                 if (!allowSwitch()) return;
 
+                toggle();
+
+                if (_current != wms.end())
+                    global_config.selectWM(C2Q(_current->execName));
+
+                spawn();
+            }
+
+        private:
+            void toggle()
+            {
                 WMPointer old = _current;
                 if (old == bad_wm) {
                     _current = good_wm;
@@ -923,11 +934,6 @@ namespace wmm {
                 } else {
                     return;
                 }
-
-                if (_current != wms.end())
-                    global_config.selectWM(C2Q(_current->execName));
-
-                spawn();
             }
 
         private:
@@ -1005,6 +1011,7 @@ namespace wmm {
                 if (prev_proc && prev_proc->state() == QProcess::Running) {
                     wmm_warning() << QString("%1 is running, force it to terminate").arg(prev_proc->program());
                     prev_proc->disconnect();
+                    prev_proc->terminate();
                 }
 
                 _proc = new QProcess;
@@ -1063,9 +1070,8 @@ namespace wmm {
 
                 if (status == QProcess::CrashExit || exitCode != 0) {
                     wmm_warning() << QString("%1 crashed or failure, switch wm").arg(_proc->program());
-                    if (allowSwitch()) {
-                        _current = _current == good_wm ? bad_wm: good_wm;
-                    }
+                    if (allowSwitch())
+                        toggle();
                 }
 
                 QTimer::singleShot(STARTUP_DELAY, this, SLOT(spawn()));
