@@ -230,13 +230,14 @@ namespace wmm {
 
         public slots:
             void requestSwitchWM() {
-                emit toggleWM();
+                emit wmChanged();
             }
 
             const QString currentWM() const;
 
         signals:
             void toggleWM();
+            void wmChanged();
 
         private:
             WindowManagerMonitor *_parent;
@@ -909,6 +910,9 @@ namespace wmm {
                 if (_proc) delete _proc;
             }
 
+        signals:
+            void onWMChanged();
+
         public slots:
             void onToggleWM() {
                 if (!allowSwitch()) return;
@@ -1020,6 +1024,8 @@ namespace wmm {
                 _proc->setProcessEnvironment(sys_env);
                 _proc->start(C2Q(_current->execName), QStringList() << "--replace");
 
+                emit onWMChanged();
+
                 if (!_proc->waitForStarted(STARTUP_DELAY)) {
                     wmm_warning() << QString("%1 start failed").arg(_proc->program());
                     if (switch_permission != ALLOW_BOTH && _current == good_wm) {
@@ -1063,6 +1069,7 @@ namespace wmm {
 
                 if (status == QProcess::CrashExit || exitCode != 0) {
                     wmm_warning() << QString("%1 crashed or failure, switch wm").arg(_proc->program());
+                    _requestedNotify = &NotifyHelper::notify3DError;
                     if (allowSwitch()) {
                         _current = _current == good_wm ? bad_wm: good_wm;
                     }
@@ -1116,7 +1123,7 @@ namespace wmm {
         : QDBusAbstractAdaptor(parent),
           _parent(parent)
     {
-
+        connect(_parent, &WindowManagerMonitor::onWMChanged, this, &MyRemoteRequestHandler::toggleWM);
     }
 
     const QString MyRemoteRequestHandler::currentWM() const
@@ -1157,7 +1164,7 @@ int main(int argc, char *argv[])
 #if USE_BUILTIN_KEYBINDING
         QObject::connect(&xcbFilter, SIGNAL(toggleWM()), &wmMonitor, SLOT(onToggleWM()));
 #else
-        QObject::connect(&dobj, SIGNAL(toggleWM()), &wmMonitor, SLOT(onToggleWM()));
+        QObject::connect(&dobj, SIGNAL(wmChanged()), &wmMonitor, SLOT(onToggleWM()));
 #endif
     }
 
