@@ -1018,6 +1018,7 @@ namespace wmm {
 
                 auto sys_env = QProcessEnvironment::systemEnvironment();
                 sys_env.insert(_current->env);
+                sys_env.insert("GDK_SCALE", "1");
 
                 connect(_proc, SIGNAL(finished(int, QProcess::ExitStatus)),
                             this, SLOT(onWMProcFinished(int, QProcess::ExitStatus)));
