@@ -287,7 +287,7 @@ namespace wmm {
                     config_base = QString("%1/.config").arg(QDir::homePath());
                 }
 
-                _cfgFilePath = QString("%1/deepin-wm-switcher/cards.ini").arg(config_base);
+                _cfgFilePath = QString("%1/deepin/deepin-wm-switcher/cards.ini").arg(config_base);
 
                 auto l2 = loadEnv();
                 if (_cfgFilePath.exists()) {
