@@ -24,6 +24,7 @@
 #include <xcb/xcb_keysyms.h>
 
 #include "config.h"
+#include "config_manager.h"
 
 #define C2Q(cs) (QString::fromUtf8((cs).c_str()))
 
@@ -84,16 +85,6 @@ static unsigned GetModifier( xcb_connection_t *p_connection, xcb_key_symbols_t *
     free( p_map ); // FIXME to check
     return 0;
 }
-#endif
-
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 5, 0))
-#define wmm_debug() qDebug()
-#define wmm_warning() qWarning()
-#define wmm_info() qInfo()
-#else
-#define wmm_debug() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug()
-#define wmm_warning() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).warning()
-#define wmm_info() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug()
 #endif
 
 namespace wmm {
@@ -362,85 +353,6 @@ namespace wmm {
             }
     };
 
-    class Config: public QObject {
-        public:
-            Config() { load(); }
-
-            void load() {
-                if (_loaded) return;
-
-                QString config_base = QStandardPaths::writableLocation( QStandardPaths::ConfigLocation);
-                if (config_base.isEmpty()) {
-                    config_base = QString("%1/.config").arg(QDir::homePath());
-                }
-
-                _path = QString("%1/deepin/deepin-wm-switcher/config.json").arg(config_base);
-                QDir dir(_path.path());
-                if (dir.exists() || dir.mkpath(_path.path())) {
-                    QFile f(_path.filePath());
-                    if (f.exists() && f.open(QIODevice::ReadOnly)) {
-                        QJsonParseError error;
-                        auto doc = QJsonDocument::fromJson(f.readAll(), &error);
-                        if (error.error != QJsonParseError::NoError) {
-                            wmm_warning() << error.errorString();
-                        }
-
-                        if (!doc.isNull()) {
-                            wmm_info() << "load config done";
-                            _jobj = doc.object();
-                        }
-                    }
-                } else {
-                    wmm_warning() << "config path does not exists or can not be made.";
-                }
-
-                _loaded = true;
-            }
-
-            bool save() {
-                QDir dir(_path.path());
-                if (!_path.exists() && !dir.mkpath(_path.path())) {
-                    return false;
-                }
-
-                QFile f(_path.filePath());
-                if (f.open(QIODevice::WriteOnly)) {
-                    QJsonDocument doc(_jobj);
-                    f.write(doc.toJson());
-                    f.flush();
-                } else {
-                    wmm_warning() << "can not open config file to save";
-                }
-
-                return true;
-            }
-
-            QString currentWM() {
-                return _jobj["last_wm"].toString();
-            }
-
-            bool allowSwitch() {
-                if (!_jobj["allow_switch"].isBool()) {
-                    _jobj["allow_switch"] = true;
-                }
-                return static_cast<QJsonObject&>(_jobj)["allow_switch"].toBool(true);
-            }
-
-            void setAllowSwitch(bool val) {
-                _jobj["allow_switch"] = val;
-                save();
-            }
-
-            void selectWM(const QString& wm) {
-                _jobj["last_wm"] = wm;
-                save();
-            }
-
-        private:
-            QJsonObject _jobj;
-            QFileInfo _path;
-            bool _loaded {false};
-    };
 
     static Settings global_settings;
     static Config global_config;

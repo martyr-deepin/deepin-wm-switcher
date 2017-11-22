@@ -12,7 +12,7 @@ find_package(Qt5X11Extras)
 add_compile_options(${DEP_LIBS_CFLAGS})
 include_directories(${DEP_LIBS_INCLUDE_DIRS})
 
-set(SRCS main.cpp)
+set(SRCS main.cpp config_manager.cpp)
 
 add_executable(${TARGET_NAME} ${SRCS})
 target_link_libraries(${TARGET_NAME} Qt5::Gui Qt5::DBus Qt5::X11Extras

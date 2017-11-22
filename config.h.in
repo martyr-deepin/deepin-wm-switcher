@@ -1,1 +1,17 @@
 #cmakedefine USE_BUILTIN_KEYBINDING
+
+
+//copied verbatim
+
+#include <QtGlobal>
+
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 5, 0))
+#define wmm_debug() qDebug()
+#define wmm_warning() qWarning()
+#define wmm_info() qInfo()
+#else
+#define wmm_debug() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug()
+#define wmm_warning() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).warning()
+#define wmm_info() QMessageLogger(__FILE__, __LINE__, Q_FUNC_INFO).debug()
+#endif
+
