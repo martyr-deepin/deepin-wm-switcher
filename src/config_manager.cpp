@@ -87,7 +87,7 @@ QString Config::currentWM()
 bool Config::allowSwitch() 
 {
     if (!_jobj.contains("allow_switch")) {
-        return _global["allow_switch"].toBool();
+        return _global["allow_switch"].toBool(true);
     } else {
         if (!_jobj["allow_switch"].isBool()) {
             _jobj["allow_switch"] = true;
