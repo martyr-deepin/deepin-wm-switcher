@@ -1,3 +1,12 @@
+##  1.1.9 (2017-11-23)
+
+
+#### Bug Fixes
+
+*   default  allow_switch to true ([97f25aa4](97f25aa4))
+
+
+
 ##  1.1.8 (2017-11-22)
 
 
